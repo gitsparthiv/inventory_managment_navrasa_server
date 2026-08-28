@@ -63,7 +63,6 @@ const loginUser = async ({ email, password }) => {
       userId: user._id,
       role: user.role,
       tenantId: user.tenantId,
-      branchId: user.branchId,
     },
     process.env.JWT_SECRET,
     {
@@ -78,8 +77,7 @@ const loginUser = async ({ email, password }) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      tenantId: user.tenantId,
-      branchId: user.branchId,
+      tenantId: user.tenantId,    
     },
   };
 };

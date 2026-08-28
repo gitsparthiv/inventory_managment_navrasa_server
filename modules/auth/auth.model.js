@@ -40,11 +40,11 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    branchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      default: null,
-      index: true,
-    },
+    branchIds: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+  }
+],
 
     isActive: {
       type: Boolean,
