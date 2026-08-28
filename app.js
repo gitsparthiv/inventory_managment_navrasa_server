@@ -32,6 +32,9 @@ app.get("/", (req, res) => {
 const authRoutes = require("./modules/auth/auth.routes");
 app.use("/api/auth", authRoutes);
 
+const productRoutes = require("./modules/products/product.routes");
+app.use("/api/products", productRoutes);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
