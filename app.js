@@ -35,6 +35,9 @@ app.use("/api/auth", authRoutes);
 const productRoutes = require("./modules/products/product.routes");
 app.use("/api/products", productRoutes);
 
+const inventoryRoutes = require("./modules/inventory/inventory.routes");
+app.use("/api/inventory", inventoryRoutes);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
