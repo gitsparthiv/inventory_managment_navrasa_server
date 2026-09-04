@@ -6,6 +6,7 @@ const movementTypes = [
   "stock_out",
   "transfer_in",
   "transfer_out",
+  "transfer_return",
   "adjustment",
   "waste",
   "consumption",

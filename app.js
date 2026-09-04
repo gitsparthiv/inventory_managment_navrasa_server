@@ -38,6 +38,15 @@ app.use("/api/products", productRoutes);
 const inventoryRoutes = require("./modules/inventory/inventory.routes");
 app.use("/api/inventory", inventoryRoutes);
 
+const supplierRoutes = require("./modules/suppliers/supplier.routes");
+app.use("/api/suppliers", supplierRoutes);
+
+const purchaseRoutes = require("./modules/purchases/purchase.routes");
+app.use("/api/purchases", purchaseRoutes);
+
+const transferRoutes = require("./modules/transfers/transfer.routes");
+app.use("/api/transfers", transferRoutes);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
