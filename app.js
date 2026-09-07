@@ -47,6 +47,9 @@ app.use("/api/purchases", purchaseRoutes);
 const transferRoutes = require("./modules/transfers/transfer.routes");
 app.use("/api/transfers", transferRoutes);
 
+const reportingRoutes = require("./modules/reporting/reporting.routes");
+app.use("/api/reports", reportingRoutes);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
