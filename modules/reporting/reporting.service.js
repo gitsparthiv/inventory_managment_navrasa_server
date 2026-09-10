@@ -6,6 +6,7 @@ const Supplier = require("../suppliers/supplier.model");
 const PurchaseOrder = require("../purchases/purchase-order.model");
 const PurchaseOrderItem = require("../purchases/purchase-order-item.model");
 const StockTransfer = require("../transfers/stock-transfer.model");
+const redis = require("../../config/redis");
 
 const createError = (message, status) => {
   const error = new Error(message);
@@ -595,6 +596,8 @@ const getSuppliersReport = async (tenantId, query = {}) => {
   };
 };
 
+const DASHBOARD_CACHE_TTL_SECONDS = 120;
+
 /**
  * 6. High-Level Executive Dashboard KPIs
  * GET /api/reports/dashboard
@@ -602,6 +605,22 @@ const getSuppliersReport = async (tenantId, query = {}) => {
 const getDashboardMetrics = async (tenantId, query = {}) => {
   requireObjectId(tenantId, "Tenant context is required");
 
+  // Construct cache key with tenant and branch isolation
+  const cacheKey = query.branchId
+    ? `inventory:dashboard:tenant:${tenantId}:branch:${query.branchId}`
+    : `inventory:dashboard:tenant:${tenantId}:all`;
+
+  // 1. Check Redis Cache
+  try {
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      return JSON.parse(cachedData);
+    }
+  } catch (err) {
+    console.warn("Redis GET error (falling back to MongoDB):", err.message);
+  }
+
+  // 2. Cache Miss: Run existing MongoDB aggregation & queries
   const tenantObjId = new mongoose.Types.ObjectId(tenantId);
   const stockMatch = { tenantId: tenantObjId };
   const poMatch = { tenantId: tenantObjId };
@@ -725,7 +744,7 @@ const getDashboardMetrics = async (tenantId, query = {}) => {
     completed: 0,
   };
 
-  return {
+  const result = {
     inventory: {
       totalStockRecords: invSummary.totalStockRecords,
       totalQuantity: invSummary.totalQuantity,
@@ -756,6 +775,15 @@ const getDashboardMetrics = async (tenantId, query = {}) => {
       createdAt: m.createdAt,
     })),
   };
+
+  // 3. Store in Redis with TTL 120 seconds
+  try {
+    await redis.set(cacheKey, JSON.stringify(result), "EX", DASHBOARD_CACHE_TTL_SECONDS);
+  } catch (err) {
+    console.warn("Redis SET error:", err.message);
+  }
+
+  return result;
 };
 
 module.exports = {

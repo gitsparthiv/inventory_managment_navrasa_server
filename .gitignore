@@ -44,5 +44,10 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Local dev notes and reference docs
+*.local.md
+dev-*.md
+.local/
+
 # Vercel
 .vercel/
