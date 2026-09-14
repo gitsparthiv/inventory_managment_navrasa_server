@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const redis = require("../../config/redis");
 
 const Product = require("../products/products.model");
 const Stock = require("./stock.model");
@@ -14,6 +15,21 @@ const createError = (message, status) => {
 const requireObjectId = (value, message) => {
   if (!value || !mongoose.isValidObjectId(value)) {
     throw createError(message, 400);
+  }
+};
+
+/**
+ * Invalidate affected dashboard cache keys after successful stock mutations
+ */
+const invalidateDashboardCache = async (tenantId, branchId) => {
+  try {
+    const keysToDelete = [
+      `inventory:dashboard:tenant:${tenantId}:all`,
+      `inventory:dashboard:tenant:${tenantId}:branch:${branchId}`,
+    ];
+    await redis.del(...keysToDelete);
+  } catch (err) {
+    console.warn("Redis dashboard cache invalidation error:", err.message);
   }
 };
 
@@ -143,6 +159,9 @@ const createOpeningStock = async (tenantId, actorId, data) => {
         allowCreateStock: true,
       });
     });
+
+    // Invalidate affected dashboard cache keys only after transaction commits successfully
+    await invalidateDashboardCache(tenantId, data.branchId);
 
     return { stock: result.stock, movement: result.movement };
   } finally {
@@ -298,6 +317,9 @@ const createAdjustment = async (tenantId, actorId, data) => {
       });
     });
 
+    // Invalidate affected dashboard cache keys only after transaction commits successfully
+    await invalidateDashboardCache(tenantId, data.branchId);
+
     return { stock: result.stock, movement: result.movement };
   } finally {
     await session.endSession();
@@ -329,6 +351,9 @@ const createWaste = async (tenantId, actorId, data) => {
       });
     });
 
+    // Invalidate affected dashboard cache keys only after transaction commits successfully
+    await invalidateDashboardCache(tenantId, data.branchId);
+
     return { stock: result.stock, movement: result.movement };
   } finally {
     await session.endSession();
@@ -359,6 +384,9 @@ const createConsumption = async (tenantId, actorId, data) => {
         allowCreateStock: false,
       });
     });
+
+    // Invalidate affected dashboard cache keys only after transaction commits successfully
+    await invalidateDashboardCache(tenantId, data.branchId);
 
     return { stock: result.stock, movement: result.movement };
   } finally {
@@ -439,6 +467,11 @@ const reconcileStock = async (tenantId, actorId, data) => {
         message: "Stock balance successfully reconciled",
       };
     });
+
+    // Invalidate affected dashboard cache keys only if an actual stock mutation occurred
+    if (outcome && outcome.variance !== 0) {
+      await invalidateDashboardCache(tenantId, data.branchId);
+    }
 
     return outcome;
   } finally {
