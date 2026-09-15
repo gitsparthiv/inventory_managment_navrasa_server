@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 
 const Product = require("./products.model");
+const Stock = require("../inventory/stock.model");
+const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
 
 const productFields = [
   "name",
@@ -92,6 +94,15 @@ const updateProduct = async (tenantId, productId, data) => {
   if (!product) {
     throw createError("Product not found", 404);
   }
+
+  // Find branches where this product has stock records to invalidate their branch caches
+  const stockBranches = await Stock.distinct("branchId", {
+    tenantId,
+    productId,
+  });
+
+  // Invalidate tenant-wide and affected branch dashboard caches
+  await invalidateDashboardCache(tenantId, stockBranches);
 
   return product;
 };

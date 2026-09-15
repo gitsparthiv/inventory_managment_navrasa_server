@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const redis = require("../../config/redis");
+const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
 
 const Product = require("../products/products.model");
 const Stock = require("./stock.model");
@@ -15,21 +15,6 @@ const createError = (message, status) => {
 const requireObjectId = (value, message) => {
   if (!value || !mongoose.isValidObjectId(value)) {
     throw createError(message, 400);
-  }
-};
-
-/**
- * Invalidate affected dashboard cache keys after successful stock mutations
- */
-const invalidateDashboardCache = async (tenantId, branchId) => {
-  try {
-    const keysToDelete = [
-      `inventory:dashboard:tenant:${tenantId}:all`,
-      `inventory:dashboard:tenant:${tenantId}:branch:${branchId}`,
-    ];
-    await redis.del(...keysToDelete);
-  } catch (err) {
-    console.warn("Redis dashboard cache invalidation error:", err.message);
   }
 };
 

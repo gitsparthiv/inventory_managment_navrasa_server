@@ -3,6 +3,7 @@ const StockTransfer = require("./stock-transfer.model");
 const StockTransferItem = require("./stock-transfer-item.model");
 const Product = require("../products/products.model");
 const { applyStockMutation } = require("../inventory/inventory.service");
+const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
 
 const createError = (message, status) => {
   const error = new Error(message);
@@ -88,6 +89,9 @@ const createStockTransfer = async (tenantId, actorId, data) => {
 
       createdItems = await StockTransferItem.insertMany(itemsToInsert, { session });
     });
+
+    // Invalidate dashboard cache for tenant and both source and destination branches
+    await invalidateDashboardCache(tenantId, [data.sourceBranchId, data.destinationBranchId]);
 
     return {
       transfer: createdTransfer,
@@ -270,6 +274,9 @@ const updateStockTransferStatus = async (tenantId, actorId, transferId, nextStat
 
   await transfer.save();
 
+  // Invalidate dashboard cache for tenant and both source and destination branches
+  await invalidateDashboardCache(tenantId, [transfer.sourceBranchId, transfer.destinationBranchId]);
+
   return transfer;
 };
 
@@ -346,6 +353,12 @@ const dispatchStockTransfer = async (tenantId, actorId, transferId, data = {}) =
 
       updatedTransfer = await transfer.save({ session });
     });
+
+    // Invalidate dashboard cache for tenant and both source and destination branches
+    await invalidateDashboardCache(tenantId, [
+      updatedTransfer.sourceBranchId,
+      updatedTransfer.destinationBranchId,
+    ]);
 
     return {
       transfer: updatedTransfer,
@@ -474,6 +487,12 @@ const receiveStockTransfer = async (tenantId, actorId, transferId, data) => {
       updatedTransfer = await transfer.save({ session });
       updatedItems = transferItems;
     });
+
+    // Invalidate dashboard cache for tenant and both source and destination branches
+    await invalidateDashboardCache(tenantId, [
+      updatedTransfer.sourceBranchId,
+      updatedTransfer.destinationBranchId,
+    ]);
 
     return {
       transfer: updatedTransfer,
@@ -604,6 +623,12 @@ const returnStockTransfer = async (tenantId, actorId, transferId, data) => {
       updatedItems = transferItems;
     });
 
+    // Invalidate dashboard cache for tenant and both source and destination branches
+    await invalidateDashboardCache(tenantId, [
+      updatedTransfer.sourceBranchId,
+      updatedTransfer.destinationBranchId,
+    ]);
+
     return {
       transfer: updatedTransfer,
       items: updatedItems,
@@ -705,6 +730,12 @@ const resolveTransferDiscrepancy = async (tenantId, actorId, transferId, data) =
       updatedTransfer = await transfer.save({ session });
       updatedItems = transferItems;
     });
+
+    // Invalidate dashboard cache for tenant and both source and destination branches
+    await invalidateDashboardCache(tenantId, [
+      updatedTransfer.sourceBranchId,
+      updatedTransfer.destinationBranchId,
+    ]);
 
     return {
       transfer: updatedTransfer,

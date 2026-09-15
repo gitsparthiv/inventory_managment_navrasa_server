@@ -4,6 +4,7 @@ const PurchaseOrderItem = require("./purchase-order-item.model");
 const Supplier = require("../suppliers/supplier.model");
 const Product = require("../products/products.model");
 const { applyStockMutation } = require("../inventory/inventory.service");
+const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
 
 // Default 10% over-receipt tolerance as approved
 const OVER_RECEIPT_TOLERANCE_PERCENT = 0.10;
@@ -104,6 +105,9 @@ const createPurchaseOrder = async (tenantId, actorId, data) => {
 
       createdItems = await PurchaseOrderItem.insertMany(itemsToInsert, { session });
     });
+
+    // Invalidate dashboard cache after transaction commits successfully
+    await invalidateDashboardCache(tenantId, data.branchId);
 
     return {
       purchaseOrder: createdPO,
@@ -287,6 +291,9 @@ const updatePurchaseOrderStatus = async (tenantId, actorId, poId, nextStatus, no
 
   await purchaseOrder.save();
 
+  // Invalidate dashboard cache after successful status update
+  await invalidateDashboardCache(tenantId, purchaseOrder.branchId);
+
   return purchaseOrder;
 };
 
@@ -397,6 +404,9 @@ const receivePurchaseOrder = async (tenantId, actorId, poId, data) => {
       updatedPO = await purchaseOrder.save({ session });
       updatedItems = poItems;
     });
+
+    // Invalidate dashboard cache after transaction commits successfully
+    await invalidateDashboardCache(tenantId, updatedPO.branchId);
 
     return {
       purchaseOrder: updatedPO,
