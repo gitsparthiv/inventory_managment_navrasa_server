@@ -12,6 +12,7 @@ const {
 } = require("./inventory.validation");
 const authenticate = require("../../shared/middleware/auth.middleware");
 const authorizeRoles = require("../../shared/middleware/role.middleware");
+const idempotency = require("../../shared/middleware/idempotency.middleware");
 
 const router = express.Router();
 
@@ -75,6 +76,7 @@ router.get(
 router.post(
   "/adjustments",
   authenticate,
+  idempotency(),
   authorizeRoles(...INVENTORY_ROLES.ADJUSTMENTS),
   validateAdjustment,
   inventoryController.createAdjustment
@@ -84,6 +86,7 @@ router.post(
 router.post(
   "/waste",
   authenticate,
+  idempotency(),
   authorizeRoles(...INVENTORY_ROLES.WASTE),
   validateWaste,
   inventoryController.createWaste
@@ -93,6 +96,7 @@ router.post(
 router.post(
   "/consumption",
   authenticate,
+  idempotency(),
   authorizeRoles(...INVENTORY_ROLES.CONSUMPTION),
   validateConsumption,
   inventoryController.createConsumption

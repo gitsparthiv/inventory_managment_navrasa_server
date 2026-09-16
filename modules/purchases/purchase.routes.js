@@ -9,6 +9,7 @@ const {
 } = require("./purchase.validation");
 const authenticate = require("../../shared/middleware/auth.middleware");
 const authorizeRoles = require("../../shared/middleware/role.middleware");
+const idempotency = require("../../shared/middleware/idempotency.middleware");
 
 const router = express.Router();
 
@@ -58,6 +59,7 @@ router.get(
 router.post(
   "/",
   authenticate,
+  idempotency(),
   authorizeRoles(...PURCHASE_ROLES.CREATE),
   validateCreatePurchaseOrder,
   purchaseController.createPurchaseOrder
@@ -84,6 +86,7 @@ router.patch(
 router.post(
   "/:id/receive",
   authenticate,
+  idempotency(),
   authorizeRoles(...PURCHASE_ROLES.RECEIVE),
   validateReceivePurchaseOrder,
   purchaseController.receivePurchaseOrder

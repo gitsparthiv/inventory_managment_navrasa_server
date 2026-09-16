@@ -11,6 +11,7 @@ const {
 } = require("./transfer.validation");
 const authenticate = require("../../shared/middleware/auth.middleware");
 const authorizeRoles = require("../../shared/middleware/role.middleware");
+const idempotency = require("../../shared/middleware/idempotency.middleware");
 
 const router = express.Router();
 
@@ -56,6 +57,7 @@ router.get(
 router.post(
   "/",
   authenticate,
+  idempotency(),
   authorizeRoles(...TRANSFER_ROLES.CREATE),
   validateCreateTransfer,
   transferController.createStockTransfer
@@ -90,6 +92,7 @@ router.post(
 router.post(
   "/:id/receive",
   authenticate,
+  idempotency(),
   authorizeRoles(...TRANSFER_ROLES.RECEIVE),
   validateReceiveTransfer,
   transferController.receiveStockTransfer
