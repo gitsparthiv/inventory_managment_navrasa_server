@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
+const { addLowStockAlertJob } = require("../../shared/jobs/low-stock.queue");
 
 const Product = require("../products/products.model");
 const Stock = require("./stock.model");
@@ -305,6 +306,18 @@ const createAdjustment = async (tenantId, actorId, data) => {
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
 
+    // Asynchronously check and enqueue low-stock alert post-commit
+    if (result.stock.quantity <= result.product.reorderLevel) {
+      await addLowStockAlertJob({
+        tenantId,
+        branchId: data.branchId,
+        productId: data.productId,
+        currentQuantity: result.stock.quantity,
+        reorderLevel: result.product.reorderLevel,
+        minimumStock: result.product.minimumStock,
+      });
+    }
+
     return { stock: result.stock, movement: result.movement };
   } finally {
     await session.endSession();
@@ -338,6 +351,18 @@ const createWaste = async (tenantId, actorId, data) => {
 
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
+
+    // Asynchronously check and enqueue low-stock alert post-commit
+    if (result.stock.quantity <= result.product.reorderLevel) {
+      await addLowStockAlertJob({
+        tenantId,
+        branchId: data.branchId,
+        productId: data.productId,
+        currentQuantity: result.stock.quantity,
+        reorderLevel: result.product.reorderLevel,
+        minimumStock: result.product.minimumStock,
+      });
+    }
 
     return { stock: result.stock, movement: result.movement };
   } finally {
@@ -373,6 +398,18 @@ const createConsumption = async (tenantId, actorId, data) => {
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
 
+    // Asynchronously check and enqueue low-stock alert post-commit
+    if (result.stock.quantity <= result.product.reorderLevel) {
+      await addLowStockAlertJob({
+        tenantId,
+        branchId: data.branchId,
+        productId: data.productId,
+        currentQuantity: result.stock.quantity,
+        reorderLevel: result.product.reorderLevel,
+        minimumStock: result.product.minimumStock,
+      });
+    }
+
     return { stock: result.stock, movement: result.movement };
   } finally {
     await session.endSession();
@@ -391,6 +428,7 @@ const reconcileStock = async (tenantId, actorId, data) => {
 
   try {
     let outcome;
+    let mutatedProduct;
     await session.withTransaction(async () => {
       const product = await Product.findOne({
         _id: data.productId,
@@ -400,6 +438,7 @@ const reconcileStock = async (tenantId, actorId, data) => {
       if (!product) {
         throw createError("Product not found", 404);
       }
+      mutatedProduct = product;
 
       const stockQuery = {
         tenantId,
@@ -456,6 +495,18 @@ const reconcileStock = async (tenantId, actorId, data) => {
     // Invalidate affected dashboard cache keys only if an actual stock mutation occurred
     if (outcome && outcome.variance !== 0) {
       await invalidateDashboardCache(tenantId, data.branchId);
+
+      // Asynchronously check and enqueue low-stock alert post-commit
+      if (outcome.stock.quantity <= mutatedProduct.reorderLevel) {
+        await addLowStockAlertJob({
+          tenantId,
+          branchId: data.branchId,
+          productId: data.productId,
+          currentQuantity: outcome.stock.quantity,
+          reorderLevel: mutatedProduct.reorderLevel,
+          minimumStock: mutatedProduct.minimumStock,
+        });
+      }
     }
 
     return outcome;

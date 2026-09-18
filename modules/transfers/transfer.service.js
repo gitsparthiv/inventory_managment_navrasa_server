@@ -4,6 +4,7 @@ const StockTransferItem = require("./stock-transfer-item.model");
 const Product = require("../products/products.model");
 const { applyStockMutation } = require("../inventory/inventory.service");
 const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
+const { addLowStockAlertJob } = require("../../shared/jobs/low-stock.queue");
 
 const createError = (message, status) => {
   const error = new Error(message);
@@ -296,6 +297,7 @@ const dispatchStockTransfer = async (tenantId, actorId, transferId, data = {}) =
     let updatedTransfer;
     let transferItems;
     let movementsCreated = [];
+    let mutationResults = [];
 
     await session.withTransaction(async () => {
       // 1. Fetch and validate transfer
@@ -339,6 +341,7 @@ const dispatchStockTransfer = async (tenantId, actorId, transferId, data = {}) =
         });
 
         movementsCreated.push(mutationResult.movement);
+        mutationResults.push(mutationResult);
       }
 
       // 4. Update status to in_transit
@@ -359,6 +362,20 @@ const dispatchStockTransfer = async (tenantId, actorId, transferId, data = {}) =
       updatedTransfer.sourceBranchId,
       updatedTransfer.destinationBranchId,
     ]);
+
+    // Asynchronously check and enqueue low-stock alert for source branch items post-commit
+    for (const res of mutationResults) {
+      if (res.stock.quantity <= res.product.reorderLevel) {
+        await addLowStockAlertJob({
+          tenantId,
+          branchId: updatedTransfer.sourceBranchId,
+          productId: res.product._id,
+          currentQuantity: res.stock.quantity,
+          reorderLevel: res.product.reorderLevel,
+          minimumStock: res.product.minimumStock,
+        });
+      }
+    }
 
     return {
       transfer: updatedTransfer,
