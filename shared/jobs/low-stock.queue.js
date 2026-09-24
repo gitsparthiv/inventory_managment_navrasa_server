@@ -63,7 +63,50 @@ const addLowStockAlertJob = async ({
   }
 };
 
+/**
+ * Enqueue a delayed low-stock follow-up / escalation job.
+ * Runs after delay (default: process.env.LOW_STOCK_FOLLOWUP_DELAY_MS || 15000ms in dev, 2 hours in prod).
+ * Uses deterministic jobId format: low-stock-followup_{tenantId}_{branchId}_{productId}_{YYYY-MM-DD}
+ */
+const addLowStockFollowUpJob = async ({
+  tenantId,
+  branchId,
+  productId,
+  reorderLevel,
+  minimumStock,
+}) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const jobId = `low-stock-followup_${tenantId}_${branchId}_${productId}_${today}`;
+    const delay = Number(process.env.LOW_STOCK_FOLLOWUP_DELAY_MS) || (process.env.NODE_ENV === "production" ? 7200000 : 15000);
+
+    console.log(`[BullMQ] Low-stock follow-up scheduled for product ${productId} at branch ${branchId} with delay: ${delay}ms`);
+
+    const job = await lowStockQueue.add(
+      "process-low-stock-followup",
+      {
+        tenantId: tenantId.toString(),
+        branchId: branchId.toString(),
+        productId: productId.toString(),
+        reorderLevel,
+        minimumStock,
+        scheduledAt: new Date().toISOString(),
+      },
+      {
+        jobId, // Deterministic deduplication key for follow-up
+        delay, // BullMQ delayed job option
+      }
+    );
+
+    return job;
+  } catch (err) {
+    console.warn("BullMQ low-stock follow-up enqueue warning:", err.message);
+    return null;
+  }
+};
+
 module.exports = {
   lowStockQueue,
   addLowStockAlertJob,
+  addLowStockFollowUpJob,
 };
