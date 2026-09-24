@@ -3,22 +3,22 @@ const { getRedisConnectionOptions } = require("../../config/queue");
 
 const QUEUE_NAME = "low-stock-alerts";
 
-// Initialize BullMQ Queue with connection options and job retention settings
+// Initialize BullMQ Queue with connection options, retry policies, and job retention settings
 const lowStockQueue = new Queue(QUEUE_NAME, {
   connection: getRedisConnectionOptions(),
   defaultJobOptions: {
-    attempts: 3,
+    attempts: Number(process.env.QUEUE_MAX_ATTEMPTS) || 4,
     backoff: {
       type: "exponential",
-      delay: 2000, // 2s, 4s, 8s retries on transient errors
+      delay: Number(process.env.QUEUE_BACKOFF_DELAY_MS) || (process.env.NODE_ENV === "production" ? 5000 : 1000),
     },
     removeOnComplete: {
-      age: 86400, // Retain completed jobs for 24 hours (86400s)
-      count: 500,  // Keep up to 500 latest completed jobs for audit
+      age: Number(process.env.QUEUE_REMOVE_ON_COMPLETE_AGE_SEC) || 86400, // Retain completed jobs for 24 hours (86400s)
+      count: Number(process.env.QUEUE_REMOVE_ON_COMPLETE_COUNT) || 500,   // Keep up to 500 latest completed jobs
     },
     removeOnFail: {
-      age: 604800, // Retain failed jobs for 7 days (604800s) for debugging
-      count: 1000,
+      age: Number(process.env.QUEUE_REMOVE_ON_FAIL_AGE_SEC) || 604800,    // Retain failed jobs for 7 days (604800s) for debugging
+      count: Number(process.env.QUEUE_REMOVE_ON_FAIL_COUNT) || 1000,      // Keep up to 1000 latest failed jobs
     },
   },
 });

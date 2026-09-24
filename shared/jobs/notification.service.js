@@ -13,15 +13,23 @@ const sendLowStockNotification = async ({
   reorderLevel,
   minimumStock,
   isCritical,
+  isFollowUp = false,
 }) => {
+  const alertType = isFollowUp ? "LOW-STOCK FOLLOW-UP / ESCALATION ALERT" : "LOW-STOCK ALERT";
   const urgencyLabel = isCritical ? "CRITICAL (Below Minimum Stock)" : "WARNING (Below Reorder Level)";
   const recipientEmails = recipients.map((r) => r.email).filter(Boolean);
+
+  // Controlled test failure hook for retry verification
+  if (typeof global.__TEST_NOTIFICATION_FAIL_HOOK__ === "function") {
+    await global.__TEST_NOTIFICATION_FAIL_HOOK__({ tenantId, productId: product._id, isFollowUp });
+  }
 
   if (process.env.NODE_ENV !== "production") {
     // Development / Testing Mode: Structured Console Alert
     console.log("\n==================================================");
-    console.log("?? [LOW-STOCK ALERT DISPATCHED - DEV MODE]");
+    console.log(`[${alertType} DISPATCHED - DEV MODE]`);
     console.log("==================================================");
+    console.log(`Type:            ${isFollowUp ? "Follow-Up Re-Check" : "Initial Alert"}`);
     console.log(`Urgency:         ${urgencyLabel}`);
     console.log(`Product:         ${product.name} (SKU: ${product.sku})`);
     console.log(`Unit:            ${product.unit}`);
@@ -37,6 +45,7 @@ const sendLowStockNotification = async ({
     return {
       success: true,
       mode: "development",
+      isFollowUp,
       recipients: recipientEmails,
     };
   }

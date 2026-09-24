@@ -174,16 +174,45 @@ const createLowStockWorker = () => {
     }
   );
 
+  workerInstance.on("active", (job) => {
+    const attempt = (job.attemptsMade || 0) + 1;
+    const maxAttempts = job.opts?.attempts || 1;
+    console.log(
+      `[BullMQ Worker] Job ${job.id} [${job.name}] ACTIVE (Attempt ${attempt}/${maxAttempts}) | Tenant: ${job.data?.tenantId} | Branch: ${job.data?.branchId} | Product: ${job.data?.productId}`
+    );
+  });
+
   workerInstance.on("completed", (job, returnvalue) => {
-    console.log(`[BullMQ Worker] Low-stock job ${job.id} (${job.name}) completed successfully for product ${returnvalue?.productName || job.data.productId}.`);
+    const attemptsUsed = (job.attemptsMade || 0) + 1;
+    const maxAttempts = job.opts?.attempts || 1;
+    console.log(
+      `[BullMQ Worker] Job ${job.id} [${job.name}] COMPLETED (Attempt ${attemptsUsed}/${maxAttempts}) for product ${returnvalue?.productName || job.data.productId}.`
+    );
   });
 
   workerInstance.on("failed", (job, err) => {
-    console.error(`[BullMQ Worker] Low-stock job ${job?.id} (${job?.name}) failed:`, err.message);
+    const attempt = job ? (job.attemptsMade || 0) : 0;
+    const maxAttempts = job?.opts?.attempts || 1;
+    const isExhausted = attempt >= maxAttempts;
+
+    if (isExhausted) {
+      console.error(
+        `\n[BullMQ Worker] ❌ Job ${job?.id} [${job?.name}] PERMANENTLY FAILED after ${attempt}/${maxAttempts} attempts.\n` +
+        `  Tenant:   ${job?.data?.tenantId}\n` +
+        `  Branch:   ${job?.data?.branchId}\n` +
+        `  Product:  ${job?.data?.productId}\n` +
+        `  Error:    ${err.message}\n` +
+        `  Job retained in failed set for inspection.\n`
+      );
+    } else {
+      console.warn(
+        `[BullMQ Worker] ⚠️ Job ${job?.id} [${job?.name}] FAILED on attempt ${attempt}/${maxAttempts}. Backoff retry scheduled. Reason: ${err.message}`
+      );
+    }
   });
 
   workerInstance.on("error", (err) => {
-    console.error("[BullMQ Worker] Worker error:", err.message);
+    console.error("[BullMQ Worker] Unexpected worker error:", err.message);
   });
 
   return workerInstance;
