@@ -7,10 +7,13 @@ const connectDB = require("./config/db");
 const redis = require("./config/redis");
 const { createLowStockWorker } = require("./shared/jobs/low-stock.worker");
 const { lowStockQueue } = require("./shared/jobs/low-stock.queue");
+const { createScheduledReportWorker } = require("./shared/jobs/scheduled-reports.worker");
+const { scheduledReportQueue } = require("./shared/jobs/scheduled-reports.queue");
 
 const PORT = process.env.PORT || 5000;
 let serverInstance = null;
 let lowStockWorker = null;
+let scheduledReportWorker = null;
 
 // Start server
 const startServer = async () => {
@@ -21,9 +24,12 @@ const startServer = async () => {
     // Connect to Redis
     await redis.connect();
 
-    // Start BullMQ Worker
+    // Start BullMQ Workers
     lowStockWorker = createLowStockWorker();
     console.log("BullMQ low-stock alert worker initialized and listening for jobs");
+
+    scheduledReportWorker = createScheduledReportWorker();
+    console.log("BullMQ scheduled reports worker initialized and listening for jobs");
 
     // Start Express server
     serverInstance = app.listen(PORT, () => {
@@ -45,11 +51,19 @@ const gracefulShutdown = async (signal) => {
     }
     if (lowStockWorker) {
       await lowStockWorker.close();
-      console.log("BullMQ worker closed");
+      console.log("BullMQ low-stock worker closed");
     }
     if (lowStockQueue) {
       await lowStockQueue.close();
-      console.log("BullMQ queue closed");
+      console.log("BullMQ low-stock queue closed");
+    }
+    if (scheduledReportWorker) {
+      await scheduledReportWorker.close();
+      console.log("BullMQ scheduled reports worker closed");
+    }
+    if (scheduledReportQueue) {
+      await scheduledReportQueue.close();
+      console.log("BullMQ scheduled reports queue closed");
     }
     if (redis && redis.status === "ready") {
       await redis.quit();
