@@ -6,6 +6,7 @@ const Stock = require("../../modules/inventory/stock.model");
 const User = require("../../modules/auth/auth.model");
 const { sendLowStockNotification } = require("./notification.service");
 const { addLowStockFollowUpJob } = require("./low-stock.queue");
+const { emitToBranch } = require("../socket/socket.service");
 
 const QUEUE_NAME = "low-stock-alerts";
 let workerInstance = null;
@@ -64,7 +65,21 @@ const createLowStockWorker = () => {
           isFollowUp: false,
         });
 
-        // 4. Schedule delayed follow-up job
+        // 4. Emit real-time low-stock alert via Socket.IO to the affected branch room
+        emitToBranch(tenantId, branchId, "stock:low-alert", {
+          productId: product._id,
+          productName: product.name,
+          sku: product.sku,
+          branchId,
+          currentQuantity,
+          reorderLevel,
+          minimumStock,
+          isCritical,
+          isFollowUp: false,
+          timestamp: new Date().toISOString(),
+        });
+
+        // 5. Schedule delayed follow-up job
         await addLowStockFollowUpJob({
           tenantId,
           branchId,
@@ -153,6 +168,20 @@ const createLowStockWorker = () => {
           minimumStock: effectiveMinimumStock,
           isCritical,
           isFollowUp: true,
+        });
+
+        // 5. Emit real-time low-stock escalation alert via Socket.IO to the affected branch room
+        emitToBranch(tenantId, branchId, "stock:low-alert", {
+          productId: product._id,
+          productName: product.name,
+          sku: product.sku,
+          branchId,
+          currentQuantity,
+          reorderLevel: effectiveReorderLevel,
+          minimumStock: effectiveMinimumStock,
+          isCritical,
+          isFollowUp: true,
+          timestamp: new Date().toISOString(),
         });
 
         return {

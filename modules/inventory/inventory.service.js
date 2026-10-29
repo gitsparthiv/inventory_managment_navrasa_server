@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { invalidateDashboardCache } = require("../../shared/utils/cache.util");
 const { addLowStockAlertJob } = require("../../shared/jobs/low-stock.queue");
+const { emitToBranch } = require("../../shared/socket/socket.service");
 
 const Product = require("../products/products.model");
 const Stock = require("./stock.model");
@@ -149,6 +150,16 @@ const createOpeningStock = async (tenantId, actorId, data) => {
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
 
+    // Broadcast real-time stock update to branch room
+    emitToBranch(tenantId, data.branchId, "stock:updated", {
+      type: "opening",
+      branchId: data.branchId,
+      productId: data.productId,
+      quantity: result.stock.quantity,
+      quantityChange: data.quantity,
+      updatedAt: new Date().toISOString(),
+    });
+
     return { stock: result.stock, movement: result.movement };
   } finally {
     await session.endSession();
@@ -178,9 +189,9 @@ const getStockBalances = async (tenantId, filters = {}) => {
   const limit = parseInt(filters.limit, 10) || 50;
   const skip = (page - 1) * limit;
 
-  const [rawStockList, total] = await Promise.all([
+  const [stocks, total] = await Promise.all([
     Stock.find(query)
-      .populate("productId", "name sku barcode categoryId unit costPrice sellingPrice minimumStock reorderLevel status")
+      .populate("productId", "name sku unit minimumStock reorderLevel costPrice sellingPrice status")
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -188,25 +199,39 @@ const getStockBalances = async (tenantId, filters = {}) => {
     Stock.countDocuments(query),
   ]);
 
-  const stockList = rawStockList.map((item) => {
-    const product = item.productId;
-    const reorderLevel = product?.reorderLevel ?? 0;
-    const minimumStock = product?.minimumStock ?? 0;
+  const mapped = stocks.map((s) => {
+    const product = s.productId || {};
+    const reorderLevel = product.reorderLevel ?? null;
+    const minimumStock = product.minimumStock ?? null;
 
-    const isLowStock = product ? item.quantity <= reorderLevel : false;
-    const isCriticalStock = product ? item.quantity <= minimumStock : false;
+    let stockStatus = "normal";
+    if (minimumStock !== null && s.quantity <= minimumStock) {
+      stockStatus = "out_of_stock";
+    } else if (reorderLevel !== null && s.quantity <= reorderLevel) {
+      stockStatus = "low_stock";
+    }
 
     return {
-      ...item,
-      isLowStock,
-      isCriticalStock,
+      _id: s._id,
+      tenantId: s.tenantId,
+      branchId: s.branchId,
+      productId: product._id || s.productId,
+      productName: product.name,
+      sku: product.sku,
+      unit: product.unit,
+      costPrice: product.costPrice,
+      sellingPrice: product.sellingPrice,
+      quantity: s.quantity,
+      reorderLevel,
+      minimumStock,
+      stockStatus,
+      updatedAt: s.updatedAt,
     };
   });
 
-  const finalResults =
-    filters.lowStock === "true" || filters.lowStock === true
-      ? stockList.filter((item) => item.isLowStock)
-      : stockList;
+  const finalResults = filters.status
+    ? mapped.filter((item) => item.stockStatus === filters.status)
+    : mapped;
 
   return {
     stocks: finalResults,
@@ -306,6 +331,16 @@ const createAdjustment = async (tenantId, actorId, data) => {
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
 
+    // Broadcast real-time stock update to branch room
+    emitToBranch(tenantId, data.branchId, "stock:updated", {
+      type: "adjustment",
+      branchId: data.branchId,
+      productId: data.productId,
+      quantity: result.stock.quantity,
+      quantityChange: data.quantityChange,
+      updatedAt: new Date().toISOString(),
+    });
+
     // Asynchronously check and enqueue low-stock alert post-commit
     if (result.stock.quantity <= result.product.reorderLevel) {
       await addLowStockAlertJob({
@@ -352,6 +387,16 @@ const createWaste = async (tenantId, actorId, data) => {
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
 
+    // Broadcast real-time stock update to branch room
+    emitToBranch(tenantId, data.branchId, "stock:updated", {
+      type: "waste",
+      branchId: data.branchId,
+      productId: data.productId,
+      quantity: result.stock.quantity,
+      quantityChange: -Math.abs(data.quantity),
+      updatedAt: new Date().toISOString(),
+    });
+
     // Asynchronously check and enqueue low-stock alert post-commit
     if (result.stock.quantity <= result.product.reorderLevel) {
       await addLowStockAlertJob({
@@ -397,6 +442,16 @@ const createConsumption = async (tenantId, actorId, data) => {
 
     // Invalidate affected dashboard cache keys only after transaction commits successfully
     await invalidateDashboardCache(tenantId, data.branchId);
+
+    // Broadcast real-time stock update to branch room
+    emitToBranch(tenantId, data.branchId, "stock:updated", {
+      type: "consumption",
+      branchId: data.branchId,
+      productId: data.productId,
+      quantity: result.stock.quantity,
+      quantityChange: -Math.abs(data.quantity),
+      updatedAt: new Date().toISOString(),
+    });
 
     // Asynchronously check and enqueue low-stock alert post-commit
     if (result.stock.quantity <= result.product.reorderLevel) {
@@ -496,6 +551,16 @@ const reconcileStock = async (tenantId, actorId, data) => {
     if (outcome && outcome.variance !== 0) {
       await invalidateDashboardCache(tenantId, data.branchId);
 
+      // Broadcast real-time stock update to branch room
+      emitToBranch(tenantId, data.branchId, "stock:updated", {
+        type: "reconciliation",
+        branchId: data.branchId,
+        productId: data.productId,
+        quantity: outcome.stock.quantity,
+        quantityChange: outcome.variance,
+        updatedAt: new Date().toISOString(),
+      });
+
       // Asynchronously check and enqueue low-stock alert post-commit
       if (outcome.stock.quantity <= mutatedProduct.reorderLevel) {
         await addLowStockAlertJob({
@@ -525,5 +590,3 @@ module.exports = {
   createConsumption,
   reconcileStock,
 };
-
-
