@@ -25,8 +25,10 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectDB();
 
-    // Connect to Redis
-    await redis.connect();
+    // Connect to Redis if not already connected or connecting
+    if (redis.status !== "ready" && redis.status !== "connecting") {
+      await redis.connect();
+    }
 
     // Create HTTP Server
     serverInstance = http.createServer(app);
@@ -97,7 +99,5 @@ const gracefulShutdown = async (signal) => {
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
-
-startServer();
 
 startServer();
